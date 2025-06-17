@@ -10,7 +10,10 @@ High-level API for easy access to random structure generation.
 from .dataloader import DataLoader
 
 # High-level API for direct access
-randomatoms = DataLoader('default', data_dir=None).get_random_structures
+_loader = None
 
-__version__ = '0.1.0'
-__all__ = ['DataLoader', 'randomatoms']
+def randomatoms(*args, **kwargs):
+    global _loader
+    if _loader is None:
+        _loader = DataLoader('default', data_dir=None)
+    return _loader.get_random_structures(*args, **kwargs)

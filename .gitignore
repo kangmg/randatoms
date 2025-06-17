@@ -194,3 +194,5 @@ cython_debug/
 .cursorindexingignore
 
 __refer__.py
+notebook.ipynb
+.venv
