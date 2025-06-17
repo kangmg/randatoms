@@ -20,9 +20,8 @@ class DatasetLoader:
     
     def __init__(self, filename: str = 'default', data_dir: str = None, n_workers: int = 2):
         if data_dir is None:
-            # Use package resources to locate the dataset directory
-            with resources.path('randatoms.dataset') as default_path:
-                data_dir = os.path.abspath(default_path)
+            # Use relative path to locate the dataset directory
+            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
                 
         self.h5_path = os.path.join(data_dir, f"{filename}.h5")
         self.n_workers = n_workers
