@@ -12,7 +12,6 @@ license = {text = "MIT"}
 authors = [
     {name = "Mingi KANG", email = "kangmg@korea.ac.kr"},
 ]
-homepage = "https://github.com/kangmg/randatoms"
 dependencies = [
     "h5py>=3.0.0",
     "numpy>=1.20.0",
