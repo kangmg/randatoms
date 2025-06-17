@@ -11,7 +11,7 @@ A random atoms package for atomistic scientists: easily sample random structures
 You can install randatoms using pip:
 
 ```bash
-pip install randatoms
+uv pip install git+https://github.com/kangmg/randatoms
 ```
 
 ## Usage
