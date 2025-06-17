@@ -22,10 +22,10 @@ pip install randatoms
 from randatoms import randomatoms
 
 # Get a single random structure
-structure = randomatoms()
+atoms = randomatoms()
 
 # Get multiple random structures with filters
-structures = randomatoms(5, seed=42, include_elements=['C', 'H'], max_atoms=50)
+atoms_list = randomatoms(5, seed=42, include_elements=['C', 'H'], max_atoms=50)
 ```
 
 ### Advanced Data Loading
@@ -36,18 +36,15 @@ from randatoms import DataLoader
 # Initialize loader
 loader = DataLoader('default')
 
-# Filter structures
-indices = loader.filter_indices(
+# Get random structures
+atoms = get_random_structures(
     include_elements=['C', 'H', 'O'],
     mw_range=(100, 500),
     max_atoms=100
 )
 
-# Load filtered structures
-structures = loader.load_structures(indices)
-
 # View statistics
-loader.print_statistics(include_elements=['C', 'H', 'O'])
+loader.print_statistics(include_elements=['C', 'H', 'O'], has_metals=True, is_periodic=True)
 ```
 
 ## Features
