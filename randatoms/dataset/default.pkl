@@ -1,0 +1,2 @@
+# Placeholder file for default dataset metadata
+# This file would typically contain serialized metadata for the dataset

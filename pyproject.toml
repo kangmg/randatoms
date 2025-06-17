@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=42.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "randatoms"
+version = "0.0.1"
+description = "A random atoms package for atomistic scientists: easily generate, filter, and manage atomic datasets."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Mingi KANG", email = "kangmg@korea.ac.kr"},
+]
+homepage = "https://github.com/kangmg/randatoms"
+dependencies = [
+    "h5py>=3.0.0",
+    "numpy>=1.20.0",
+    "pandas>=1.2.0",
+    "ase>=3.22.0",
+    "tqdm>=4.60.0",
+]
+
+[tool.setuptools]
+packages = ["randatoms"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"randatoms.dataset" = ["*.h5", "*.pkl"]
