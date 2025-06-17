@@ -37,7 +37,7 @@ from randatoms import DataLoader
 loader = DataLoader('default')
 
 # Get random structures
-atoms = get_random_structures(
+atoms = loader.get_random_structures(
     include_elements=['C', 'H', 'O'],
     mw_range=(100, 500),
     max_atoms=100
