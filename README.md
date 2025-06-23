@@ -50,16 +50,8 @@ atoms = loader.get_random_structures(**query)
 loader.print_statistics(**query)
 ```
 
-## Features
 
-- **Conversion**: Transform ASE Atoms objects to HDF5 format with metadata indexing.
-- **Merging**: Combine multiple HDF5 datasets into a single dataset.
-- **Loading**: Efficiently load and filter structures based on various criteria like elements, molecular weight, and atom count.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Unit test
+```shell
+python3 -m unittest discover test -v
+```

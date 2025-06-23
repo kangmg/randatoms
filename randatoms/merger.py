@@ -11,6 +11,8 @@ from tqdm import tqdm
 import importlib.resources as resources
 from .converter import ASEtoHDF5Converter
 import warnings
+import tarfile
+import io
 
 class DatasetMerger:
     """Merge multiple HDF5 datasets into one with optimized performance"""
@@ -26,69 +28,104 @@ class DatasetMerger:
         
 
     def merge(self):
-        """Merge multiple datasets into single HDF5 file with progress tracking"""
-            
-        output_h5 = os.path.join(self.data_dir, f"{self.output_name}.h5")
-        output_metadata = os.path.join(self.data_dir, f"{self.output_name}.pkl")
-        
+        """Merge multiple datasets into a single TAR file with progress tracking"""
+        output_tar = os.path.join(self.data_dir, f"{self.output_name}.tar")
+
         all_metadata = []
         current_index = 0
         total_structures = 0
-        
+
         # First pass: count total structures
         print("Counting structures...")
         for name in self.merge_name_list:
-            metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
-            with open(metadata_file, 'rb') as f:
-                metadata = pickle.load(f)
-                total_structures += len(metadata['dataframe'])
-        
+            tar_path = os.path.join(self.data_dir, f"{name}.tar")
+            try:
+                with tarfile.open(tar_path, 'r') as tar:
+                    pkl_member = next((m for m in tar.getmembers() if m.name.endswith('.pkl')), None)
+                    if pkl_member:
+                        with tar.extractfile(pkl_member) as f:
+                            metadata = pickle.load(f)
+                            total_structures += len(metadata['dataframe'])
+                    else:
+                        warnings.warn(f"Warning: No .pkl file found in {tar_path}. Skipping.")
+            except FileNotFoundError:
+                warnings.warn(f"Warning: Dataset archive not found at {tar_path}. Skipping.")
+
         print(f"Merging {total_structures} structures from {len(self.merge_name_list)} datasets...")
 
         keys_in_output = set()
-        with h5py.File(output_h5, 'w') as out_f:
+        h5_buffer = io.BytesIO()
+        with h5py.File(h5_buffer, 'w') as out_f:
             out_f.attrs['merged_datasets'] = self.merge_name_list
             out_f.attrs['total_structures'] = total_structures
-            
+
             with tqdm(total=total_structures, desc="Merging structures") as pbar:
                 for name in self.merge_name_list:
-                    h5_file = os.path.join(self.data_dir, f"{name}.h5")
-                    metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
-                    
-                    # Load metadata
-                    with open(metadata_file, 'rb') as f:
-                        metadata_dict = pickle.load(f)
-                        df = metadata_dict['dataframe']
+                    tar_path = os.path.join(self.data_dir, f"{name}.tar")
+                    if not os.path.exists(tar_path):
+                        continue
 
-                    # Copy HDF5 data with batch processing
-                    with h5py.File(h5_file, 'r') as in_f:
-                        for old_key in in_f.keys():
-                            if old_key in keys_in_output:
-                                new_key = f"{old_key}@{name}"
-                                warnings.warn(f"Warning: Duplicate key '{old_key}' from dataset '{name}'. Renaming to '{new_key}'.")
-                            else:
-                                new_key = old_key  # Use original key
-                            
-                            keys_in_output.add(new_key)
-                            
-                            # Use HDF5's efficient copy
-                            in_f.copy(old_key, out_f, new_key)
+                    with tarfile.open(tar_path, 'r') as tar:
+                        # Load metadata
+                        pkl_member = next((m for m in tar.getmembers() if m.name.endswith('.pkl')), None)
+                        if not pkl_member:
+                            continue
+                        with tar.extractfile(pkl_member) as f:
+                            metadata_dict = pickle.load(f)
+                            df = metadata_dict['dataframe']
 
-                            # Update metadata
-                            row = df[df['key'] == old_key].iloc[0].copy()
-                            row['index'] = current_index
-                            row['key'] = new_key
-                            row['dataset'] = name  # Preserve original dataset name
-                            all_metadata.append(row.to_dict())
-                            
-                            current_index += 1
-                            pbar.update(1)
+                        # Load HDF5 data
+                        h5_member = next((m for m in tar.getmembers() if m.name.endswith('.h5')), None)
+                        if not h5_member:
+                            continue
+                        h5_file = tar.extractfile(h5_member)
+                        h5_content = h5_file.read()
 
-        # Save merged metadata
-        print("Saving merged metadata...")
-        converter = ASEtoHDF5Converter()
-        converter._save_metadata(all_metadata, output_metadata)
-        print(f"\033[1;34mMerge complete! Output saved as {self.output_name}.h5 and {self.output_name}.pkl\033[0m")
+                        with h5py.File(io.BytesIO(h5_content), 'r') as in_f:
+                            for old_key in in_f.keys():
+                                if old_key in keys_in_output:
+                                    new_key = f"{old_key}@{name}"
+                                    warnings.warn(f"Warning: Duplicate key '{old_key}' from dataset '{name}'. Renaming to '{new_key}'.")
+                                else:
+                                    new_key = old_key
+
+                                keys_in_output.add(new_key)
+                                in_f.copy(old_key, out_f, new_key)
+
+                                # Update metadata
+                                row = df[df['key'] == old_key].iloc[0].copy()
+                                row['index'] = current_index
+                                row['key'] = new_key
+                                row['dataset'] = name
+                                all_metadata.append(row.to_dict())
+
+                                current_index += 1
+                                pbar.update(1)
+
+        # Prepare metadata for saving
+        merged_metadata_df = pd.DataFrame(all_metadata)
+        metadata_to_save = {
+            'dataframe': merged_metadata_df,
+        }
+        pkl_buffer = io.BytesIO()
+        pickle.dump(metadata_to_save, pkl_buffer)
+
+        # Write to a single TAR file
+        print("Saving merged data to TAR archive...")
+        with tarfile.open(output_tar, 'w') as tar:
+            # Add HDF5 data
+            h5_buffer.seek(0)
+            h5_info = tarfile.TarInfo(name=f"{self.output_name}.h5")
+            h5_info.size = len(h5_buffer.getvalue())
+            tar.addfile(h5_info, h5_buffer)
+
+            # Add pickle data
+            pkl_buffer.seek(0)
+            pkl_info = tarfile.TarInfo(name=f"{self.output_name}.pkl")
+            pkl_info.size = len(pkl_buffer.getvalue())
+            tar.addfile(pkl_info, pkl_buffer)
+
+        print(f"\033[1;34mMerge complete! Output saved as {self.output_name}.tar\033[0m")
 
     def merge_preview(self):
         """Preview the result of merging without actually merging."""
@@ -97,16 +134,24 @@ class DatasetMerger:
         all_datasets_data = []
         
         for name in self.merge_name_list:
-            metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
-            if not os.path.exists(metadata_file):
-                warnings.warn(f"Warning: Metadata file not found for '{name}'. Skipping.")
+            tar_path = os.path.join(self.data_dir, f"{name}.tar")
+            if not os.path.exists(tar_path):
+                warnings.warn(f"Warning: Dataset archive not found at {tar_path}. Skipping.")
                 continue
             
-            with open(metadata_file, 'rb') as f:
-                metadata = pickle.load(f)
-                df = metadata['dataframe']
-                all_datasets_data.append((name, df))
-                total_structures += len(df)
+            try:
+                with tarfile.open(tar_path, 'r') as tar:
+                    pkl_member = next((m for m in tar.getmembers() if m.name.endswith('.pkl')), None)
+                    if pkl_member:
+                        with tar.extractfile(pkl_member) as f:
+                            metadata = pickle.load(f)
+                            df = metadata['dataframe']
+                            all_datasets_data.append((name, df))
+                            total_structures += len(df)
+                    else:
+                        warnings.warn(f"Warning: No .pkl file found in {tar_path} for '{name}'. Skipping.")
+            except tarfile.ReadError:
+                warnings.warn(f"Warning: Could not read TAR archive at {tar_path}. Skipping.")
 
         if not all_datasets_data:
             print("No valid datasets to preview.")

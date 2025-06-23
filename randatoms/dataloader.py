@@ -13,32 +13,51 @@ import os
 from tqdm import tqdm
 import multiprocessing as mp
 import importlib.resources as resources
+import tarfile
+import io
 
 
-class DatasetLoader:
-    """DatasetLoader for HDF5 molecular datasets with filtering and indexing - optimized"""
+class DataLoader:
+    """DatasetLoader for TAR-archived molecular datasets with filtering and indexing."""
     
-    def __init__(self, filename: str = 'default', data_dir: str = None, n_workers: int = 2):
+    def __init__(self, filename: str = 'default', data_dir: str = None, n_workers: int = None):
         if data_dir is None:
-            # Use relative path to locate the dataset directory
             data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
                 
-        self.h5_path = os.path.join(data_dir, f"{filename}.h5")
-        self.n_workers = n_workers
+        self.tar_path = os.path.join(data_dir, f"{filename}.tar")
+        self.n_workers = n_workers if n_workers else max(2, mp.cpu_count())
+        self.h5_buffer = None
+
+        print(f"Loading dataset from TAR archive: {self.tar_path}")
         
-        # Load metadata
-        metadata_path = os.path.join(data_dir, f"{filename}.pkl")
-        print(f"Loading metadata from {metadata_path}")
-        
-        with open(metadata_path, 'rb') as f:
-            self.metadata_dict = pickle.load(f)
+        try:
+            with tarfile.open(self.tar_path, 'r') as tar:
+                # Load metadata from .pkl file
+                pkl_member = next((m for m in tar.getmembers() if m.name.endswith('.pkl')), None)
+                if not pkl_member:
+                    raise FileNotFoundError("No .pkl file found in the TAR archive.")
+                
+                with tar.extractfile(pkl_member) as f:
+                    self.metadata_dict = pickle.load(f)
+
+                # Load .h5 file into an in-memory buffer
+                h5_member = next((m for m in tar.getmembers() if m.name.endswith('.h5')), None)
+                if not h5_member:
+                    raise FileNotFoundError("No .h5 file found in the TAR archive.")
+
+                with tar.extractfile(h5_member) as f:
+                    self.h5_buffer = io.BytesIO(f.read())
+
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Dataset archive not found at {self.tar_path}")
+        except tarfile.ReadError:
+            raise IOError(f"Could not read TAR archive at {self.tar_path}")
 
         self.df = self.metadata_dict['dataframe']
-        self.element_index = self.metadata_dict['element_index']
-        self.mw_sorted_indices = self.metadata_dict['mw_sorted_indices']
-        self.statistics = self.metadata_dict['statistics']
+        self.element_index = self.metadata_dict.get('element_index', {})
+        self.mw_sorted_indices = self.metadata_dict.get('mw_sorted_indices', [])
+        self.statistics = self.metadata_dict.get('statistics', {})
         
-        # Convert element index back to sets for faster operations
         self.element_index = {k: set(v) for k, v in self.element_index.items()}
         
         print(f"Loaded dataset with {len(self.df)} structures")
@@ -103,20 +122,19 @@ class DatasetLoader:
         return sorted(list(valid_indices))
 
     def load_structures(self, indices: List[int], show_progress: bool = True) -> List[Atoms]:
-        """Load structures by indices with optimized parallel processing"""
+        """Load structures by indices with optimized parallel processing from in-memory HDF5."""
         if not indices:
             return []
         
         if len(indices) == 1:
             return [self._load_single(indices[0])]
 
-        # Optimized batch loading with better load balancing
         batch_size = max(1, min(50, len(indices) // self.n_workers))
         batches = [indices[i:i + batch_size] for i in range(0, len(indices), batch_size)]
 
         def load_batch(batch_indices):
             structures = []
-            with h5py.File(self.h5_path, 'r') as f:
+            with h5py.File(self.h5_buffer, 'r') as f:
                 for idx in batch_indices:
                     structures.append(self._load_from_h5(f, idx))
             return structures
@@ -138,8 +156,8 @@ class DatasetLoader:
         return [structure for batch in batch_results for structure in batch]
 
     def _load_single(self, idx: int) -> Atoms:
-        """Load single structure"""
-        with h5py.File(self.h5_path, 'r') as f:
+        """Load a single structure from the in-memory HDF5 buffer."""
+        with h5py.File(self.h5_buffer, 'r') as f:
             return self._load_from_h5(f, idx)
 
     def _load_from_h5(self, h5_file, idx: int) -> Atoms:
@@ -313,5 +331,3 @@ class DatasetLoader:
                 print(f"{elem_fmt}: {count_fmt} structures {bar} {percent_fmt}")
             print("=======================================================")
 
-# Alias for compatibility
-DataLoader = DatasetLoader

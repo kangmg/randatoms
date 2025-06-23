@@ -14,6 +14,8 @@ from tqdm import tqdm
 import multiprocessing as mp
 import pkgutil
 import importlib.resources as resources
+import tarfile
+import io
 
 
 class ASEtoHDF5Converter:
@@ -21,36 +23,51 @@ class ASEtoHDF5Converter:
     
     def __init__(self, chunk_size: int = 1000, n_workers: int = None, batch_size: int = 100):
         self.chunk_size = chunk_size
-        self.n_workers = n_workers or min(4, mp.cpu_count())
+        self.n_workers = n_workers if n_workers else max(2, mp.cpu_count())
         self.batch_size = batch_size  # Process multiple structures per worker
 
-    def convert_atoms_list(self, atoms_list: List[Atoms], filename: str, 
-                          data_dir: str = None, dataset_name: str = None, compress: bool = True):
-        """Convert list of atoms to HDF5 with metadata"""
+    def convert_atoms_list(self, atoms_list: List[Atoms], filename: str,
+                           data_dir: str = None, dataset_name: str = None, compress: bool = True):
+        """Convert list of atoms to a single TAR file containing HDF5 and metadata."""
         if data_dir is None:
-            # Use package resources to locate the dataset directory
-            with resources.path('randatoms.dataset', 'default.pkl') as default_path:
-                data_dir = os.path.dirname(default_path)
+            data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
         if dataset_name is None:
             dataset_name = 'default'
-            
-        output_h5 = os.path.join(data_dir, f"{filename}.h5")
-        metadata_path = os.path.join(data_dir, f"{filename}.pkl")
 
-        # Create directory if it doesn't exist
-        os.makedirs(data_dir, exist_ok=True)
+        output_tar_path = os.path.join(data_dir, f"{filename}.tar")
 
         print(f"Converting {len(atoms_list)} structures...")
-        
-        # Extract metadata with optimized parallel processing
+
+        # Extract metadata
         metadata_list = self._extract_metadata(atoms_list, dataset_name)
-        
-        self._write_hdf5_optimized(atoms_list, output_h5, dataset_name, compress)
-        
+
+        # In-memory buffers
+        h5_buffer = io.BytesIO()
+        pkl_buffer = io.BytesIO()
+
+        # Write HDF5 data to buffer
+        self._write_hdf5_optimized(atoms_list, h5_buffer, dataset_name, compress)
+
+        # Save metadata to buffer
         print("Saving metadata...")
-        self._save_metadata(metadata_list, metadata_path)
-        
-        print(f"\033[1;34mConversion complete! Files saved as {filename}.h5 and {filename}.pkl\033[0m")
+        self._save_metadata(metadata_list, pkl_buffer)
+
+        # Create TAR archive
+        print(f"Creating TAR archive at {output_tar_path}...")
+        with tarfile.open(output_tar_path, 'w') as tar:
+            # Add HDF5 data
+            h5_buffer.seek(0)
+            h5_info = tarfile.TarInfo(name=f"{filename}.h5")
+            h5_info.size = len(h5_buffer.getvalue())
+            tar.addfile(h5_info, h5_buffer)
+
+            # Add pickle data
+            pkl_buffer.seek(0)
+            pkl_info = tarfile.TarInfo(name=f"{filename}.pkl")
+            pkl_info.size = len(pkl_buffer.getvalue())
+            tar.addfile(pkl_info, pkl_buffer)
+
+        print(f"\033[1;34mConversion complete! File saved as {filename}.tar\033[0m")
 
     def _extract_metadata(self, atoms_list: List[Atoms], dataset_name: str) -> List[Dict]:
         """Extract metadata using optimized parallel processing"""
@@ -91,13 +108,13 @@ class ASEtoHDF5Converter:
         metadata_list.sort(key=lambda x: x['index'])
         return metadata_list
 
-    def _write_hdf5_optimized(self, atoms_list: List[Atoms], output_path: str, 
+    def _write_hdf5_optimized(self, atoms_list: List[Atoms], h5_buffer: io.BytesIO,
                              dataset_name: str, compress: bool):
-        """Write atoms to HDF5 file with optimized chunking"""
+        """Write atoms to an in-memory HDF5 buffer with optimized chunking."""
         compression = 'gzip' if compress else None
-        compression_opts = 6 if compress else None  # Good balance of speed/compression
+        compression_opts = 6 if compress else None
 
-        with h5py.File(output_path, 'w') as f:
+        with h5py.File(h5_buffer, 'w') as f:
             f.attrs.update({
                 'dataset_name': dataset_name,
                 'n_structures': len(atoms_list),
@@ -143,24 +160,18 @@ class ASEtoHDF5Converter:
                         )
                         group.create_dataset('pbc', data=atoms.pbc)
 
-    def _save_metadata(self, metadata_list: List[Dict], metadata_path: str):
-        """Save metadata with indices and statistics - optimized for large datasets"""
+    def _save_metadata(self, metadata_list: List[Dict], pkl_buffer: io.BytesIO):
+        """Save metadata to an in-memory pickle buffer."""
         df = pd.DataFrame(metadata_list)
-        
-        # Build element index efficiently using vectorized operations
+
+        # Efficiently build element index
         print("Building element index...")
         element_index = {}
-        
-        # Vectorized approach for building element index
         for i, metadata in enumerate(tqdm(metadata_list, desc="Processing elements")):
             for element in metadata['elements']:
-                if element not in element_index:
-                    element_index[element] = set()
-                element_index[element].add(i)
-        
-        # Convert sets to sorted lists for better serialization
+                element_index.setdefault(element, set()).add(i)
         element_index = {k: sorted(list(v)) for k, v in element_index.items()}
-        
+
         # Calculate statistics
         stats = {
             'total_structures': len(df),
@@ -180,7 +191,5 @@ class ASEtoHDF5Converter:
             'mw_sorted_indices': df['molecular_weight'].argsort().values,
             'statistics': stats,
         }
-        
-        # Use highest protocol for better performance
-        with open(metadata_path, 'wb') as f:
-            pickle.dump(metadata_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        pickle.dump(metadata_dict, pkl_buffer, protocol=pickle.HIGHEST_PROTOCOL)
