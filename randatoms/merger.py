@@ -179,7 +179,7 @@ class DatasetMerger:
         print(f"Datasets to merge: {self.merge_name_list}")
         print(f"Total structures: {total_structures:,}")
         print(f"Molecular weight range: ({mw_min:.1f}, {mw_max:.1f})")
-        print(f"Atoms range: ({atoms_min}, {atoms_max})")
+        print(f"# atoms range: ({atoms_min}, {atoms_max})")
         print("=======================================================")
         
         print("\n\033[1;34mCombined Elemental Composition\033[0m")
@@ -214,7 +214,7 @@ class DatasetMerger:
             print(f"  Dataset: \033[1m{name}\033[0m")
             print(f"  - Structures: {len(df):,}")
             print(f"  - Molecular weight range: ({mw_min_ind:.1f}, {mw_max_ind:.1f})")
-            print(f"  - Atoms range: ({atoms_min_ind}, {atoms_max_ind})")
+            print(f"  - # atoms range: ({atoms_min_ind}, {atoms_max_ind})")
             if i < len(all_datasets_data) - 1:
                  print("-------------------------------------------------------")
         print("=======================================================")
