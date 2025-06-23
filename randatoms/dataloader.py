@@ -284,7 +284,7 @@ class DataLoader:
             "Percentage of dataset",
             "Molecular weight range",
             "Average atoms per structure",
-            "Atoms range",
+            "Num. of atoms range",
             "Periodic structures",
             "Structures with metals"
         ]
