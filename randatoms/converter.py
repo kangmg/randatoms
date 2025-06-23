@@ -179,7 +179,6 @@ class ASEtoHDF5Converter:
             'element_index': element_index,
             'mw_sorted_indices': df['molecular_weight'].argsort().values,
             'statistics': stats,
-            'version': '2.0',  # Version for compatibility tracking
         }
         
         # Use highest protocol for better performance

@@ -28,7 +28,7 @@ class DatasetLoader:
         
         # Load metadata
         metadata_path = os.path.join(data_dir, f"{filename}.pkl")
-        print(f"Loading metadata from {metadata_path}...")
+        print(f"Loading metadata from {metadata_path}")
         
         with open(metadata_path, 'rb') as f:
             self.metadata_dict = pickle.load(f)
@@ -222,13 +222,14 @@ class DatasetLoader:
             'has_metals_ratio': float(filtered_df['has_metals'].mean()),
         }
         
-        # Add element distribution
+        # Add element composition
         element_counts = {}
         for idx in valid_indices:
-            for element in self.df.iloc[idx]['elements']:
+            # Use set to count each element only once per structure
+            for element in set(self.df.iloc[idx]['elements']):
                 element_counts[element] = element_counts.get(element, 0) + 1
         
-        stats['element_distribution'] = dict(sorted(element_counts.items(), 
+        stats['element_coverage'] = dict(sorted(element_counts.items(), 
                                                    key=lambda x: x[1], reverse=True))
         
         return stats
@@ -239,8 +240,8 @@ class DatasetLoader:
         def format_range(val1, val2, precision=1):
             return f"({val1:.{precision}f}, {val2:.{precision}f})"
 
-        if not filter_kwargs:
-            raise ValueError("At least one filter keyword argument must be provided.")
+        # if not filter_kwargs:
+        #     raise ValueError("At least one filter keyword argument must be provided.")
 
         stats = self.get_filtered_statistics(**filter_kwargs)
 
@@ -263,12 +264,12 @@ class DatasetLoader:
         value_width = 20
 
         count_str = f"{stats['count']:,}"
-        percentage_str = f"{stats['percentage']:.1f}%"
+        percentage_str = f"{stats['percentage']:.1f} %"
         mw_range_str = format_range(stats['mw_range'][0], stats['mw_range'][1])
         avg_atoms_str = f"{stats['avg_atoms']:.1f}"
         atoms_range_str = format_range(stats['atoms_range'][0], stats['atoms_range'][1], 0)
-        periodic_str = f"{stats['periodic_ratio'] * 100:.1f}%"
-        metals_str = f"{stats['has_metals_ratio'] * 100:.1f}%"
+        periodic_str = f"{stats['periodic_ratio'] * 100:.1f} %"
+        metals_str = f"{stats['has_metals_ratio'] * 100:.1f} %"
 
         contents = [
             f"\n\033[1;34mDataset Statistics\033[0m",
@@ -287,14 +288,14 @@ class DatasetLoader:
         print('\n'.join(contents))
 
                 
-        if 'element_distribution' in stats:
-            print("\n\033[1;34mElement Distribution\033[0m")
+        if 'element_coverage' in stats:
+            print("\n\033[1;34mElemental Coverage in Dataset\033[0m")
             print("=======================================================")
 
             total_count = stats['count']
             bar_length = 10
 
-            elements = list(stats['element_distribution'].items())
+            elements = list(stats['element_coverage'].items())
 
             max_elem_len = max(len(elem) for elem, _ in elements)
             max_count_len = max(len(f"{count:,}") for _, count in elements)
@@ -307,7 +308,7 @@ class DatasetLoader:
 
                 elem_fmt = f"{elem:<{max_elem_len}}"
                 count_fmt = f"{count:>{max_count_len},}"
-                percent_fmt = f"{percentage:>4.1f}%"
+                percent_fmt = f"{percentage:>4.1f} %"
 
                 print(f"{elem_fmt}: {count_fmt} structures {bar} {percent_fmt}")
             print("=======================================================")

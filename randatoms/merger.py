@@ -5,26 +5,31 @@ Merger module for combining multiple HDF5 datasets into a single dataset.
 import h5py
 import os
 import pickle
+import pandas as pd
 from typing import List
 from tqdm import tqdm
 import importlib.resources as resources
 from .converter import ASEtoHDF5Converter
-
+import warnings
 
 class DatasetMerger:
     """Merge multiple HDF5 datasets into one with optimized performance"""
-    
-    def merge_datasets(self, data_dir: str = None, merge_name_list: List[str] = None, output_name: str = 'merged'):
+
+    def __init__(self, merge_name_list: List[str], output_name: str, data_dir: str = None):
+        self.merge_name_list = merge_name_list
+        self.output_name = output_name        
+        if not data_dir:
+            # internal dataset path
+            self.data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
+        else:
+            self.data_dir = data_dir        
+        
+
+    def merge(self):
         """Merge multiple datasets into single HDF5 file with progress tracking"""
-        if data_dir is None:
-            # Use package resources to locate the dataset directory
-            with resources.path('randatoms.dataset', 'default.pkl') as default_path:
-                data_dir = os.path.dirname(default_path)
-        if merge_name_list is None:
-            merge_name_list = ['default']
             
-        output_h5 = os.path.join(data_dir, f"{output_name}.h5")
-        output_metadata = os.path.join(data_dir, f"{output_name}.pkl")
+        output_h5 = os.path.join(self.data_dir, f"{self.output_name}.h5")
+        output_metadata = os.path.join(self.data_dir, f"{self.output_name}.pkl")
         
         all_metadata = []
         current_index = 0
@@ -32,22 +37,23 @@ class DatasetMerger:
         
         # First pass: count total structures
         print("Counting structures...")
-        for name in merge_name_list:
-            metadata_file = os.path.join(data_dir, f"{name}.pkl")
+        for name in self.merge_name_list:
+            metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
             with open(metadata_file, 'rb') as f:
                 metadata = pickle.load(f)
                 total_structures += len(metadata['dataframe'])
         
-        print(f"Merging {total_structures} structures from {len(merge_name_list)} datasets...")
+        print(f"Merging {total_structures} structures from {len(self.merge_name_list)} datasets...")
 
+        keys_in_output = set()
         with h5py.File(output_h5, 'w') as out_f:
-            out_f.attrs['merged_datasets'] = merge_name_list
+            out_f.attrs['merged_datasets'] = self.merge_name_list
             out_f.attrs['total_structures'] = total_structures
             
             with tqdm(total=total_structures, desc="Merging structures") as pbar:
-                for name in merge_name_list:
-                    h5_file = os.path.join(data_dir, f"{name}.h5")
-                    metadata_file = os.path.join(data_dir, f"{name}.pkl")
+                for name in self.merge_name_list:
+                    h5_file = os.path.join(self.data_dir, f"{name}.h5")
+                    metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
                     
                     # Load metadata
                     with open(metadata_file, 'rb') as f:
@@ -57,17 +63,22 @@ class DatasetMerger:
                     # Copy HDF5 data with batch processing
                     with h5py.File(h5_file, 'r') as in_f:
                         for old_key in in_f.keys():
-                            new_key = f"merged_{current_index:06d}"
+                            if old_key in keys_in_output:
+                                new_key = f"{old_key}@{name}"
+                                warnings.warn(f"Warning: Duplicate key '{old_key}' from dataset '{name}'. Renaming to '{new_key}'.")
+                            else:
+                                new_key = old_key  # Use original key
+                            
+                            keys_in_output.add(new_key)
                             
                             # Use HDF5's efficient copy
                             in_f.copy(old_key, out_f, new_key)
 
                             # Update metadata
-                            old_idx = int(old_key.split('_')[-1])
-                            row = df[df['index'] == old_idx].iloc[0].copy()
+                            row = df[df['key'] == old_key].iloc[0].copy()
                             row['index'] = current_index
                             row['key'] = new_key
-                            row['dataset'] = 'merged'
+                            row['dataset'] = name  # Preserve original dataset name
                             all_metadata.append(row.to_dict())
                             
                             current_index += 1
@@ -77,4 +88,88 @@ class DatasetMerger:
         print("Saving merged metadata...")
         converter = ASEtoHDF5Converter()
         converter._save_metadata(all_metadata, output_metadata)
-        print(f"\033[1;34mMerge complete! Output saved as {output_name}.h5 and {output_name}.pkl\033[0m")
+        print(f"\033[1;34mMerge complete! Output saved as {self.output_name}.h5 and {self.output_name}.pkl\033[0m")
+
+    def merge_preview(self):
+        """Preview the result of merging without actually merging."""
+        
+        total_structures = 0
+        all_datasets_data = []
+        
+        for name in self.merge_name_list:
+            metadata_file = os.path.join(self.data_dir, f"{name}.pkl")
+            if not os.path.exists(metadata_file):
+                warnings.warn(f"Warning: Metadata file not found for '{name}'. Skipping.")
+                continue
+            
+            with open(metadata_file, 'rb') as f:
+                metadata = pickle.load(f)
+                df = metadata['dataframe']
+                all_datasets_data.append((name, df))
+                total_structures += len(df)
+
+        if not all_datasets_data:
+            print("No valid datasets to preview.")
+            return
+
+        all_dfs = [df for _, df in all_datasets_data]
+        merged_df = pd.concat(all_dfs, ignore_index=True)
+
+        # Calculate combined statistics
+        mw_min = merged_df['molecular_weight'].min()
+        mw_max = merged_df['molecular_weight'].max()
+        atoms_min = merged_df['n_atoms'].min()
+        atoms_max = merged_df['n_atoms'].max()
+        
+        element_counts = {}
+        for elements_list in merged_df['elements']:
+            for element in set(elements_list):
+                element_counts[element] = element_counts.get(element, 0) + 1
+        
+        sorted_element_counts = dict(sorted(element_counts.items(), key=lambda item: item[1], reverse=True))
+
+        # Print preview
+        print("\n\033[1;34mMerged Dataset Preview\033[0m")
+        print("=======================================================")
+        print(f"Datasets to merge: {self.merge_name_list}")
+        print(f"Total structures: {total_structures:,}")
+        print(f"Molecular weight range: ({mw_min:.1f}, {mw_max:.1f})")
+        print(f"Atoms range: ({atoms_min}, {atoms_max})")
+        print("=======================================================")
+        
+        print("\n\033[1;34mCombined Elemental Composition\033[0m")
+        print("=======================================================")
+        
+        bar_length = 10
+        if sorted_element_counts:
+            max_elem_len = max(len(elem) for elem in sorted_element_counts.keys())
+            max_count_len = max(len(f"{count:,}") for count in sorted_element_counts.values())
+
+            for elem, count in sorted_element_counts.items():
+                percentage = count / total_structures * 100
+                filled_length = int(round(bar_length * percentage / 100))
+                bar = '[' + '=' * filled_length + ' ' * (bar_length - filled_length) + ']'
+
+                elem_fmt = f"{elem:<{max_elem_len}}"
+                count_fmt = f"{count:>{max_count_len},}"
+                percent_fmt = f"{percentage:>4.1f}%"
+
+                print(f"{elem_fmt}: {count_fmt} structures {bar} {percent_fmt}")
+        print("=======================================================")
+
+        # Print individual dataset info
+        print("\n\033[1;32mDatasets to merge\033[0m")
+        print("=======================================================")
+        for i, (name, df) in enumerate(all_datasets_data):
+            mw_min_ind = df['molecular_weight'].min()
+            mw_max_ind = df['molecular_weight'].max()
+            atoms_min_ind = df['n_atoms'].min()
+            atoms_max_ind = df['n_atoms'].max()
+            
+            print(f"  Dataset: \033[1m{name}\033[0m")
+            print(f"  - Structures: {len(df):,}")
+            print(f"  - Molecular weight range: ({mw_min_ind:.1f}, {mw_max_ind:.1f})")
+            print(f"  - Atoms range: ({atoms_min_ind}, {atoms_max_ind})")
+            if i < len(all_datasets_data) - 1:
+                 print("-------------------------------------------------------")
+        print("=======================================================")
