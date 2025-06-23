@@ -32,7 +32,7 @@ class ASEtoHDF5Converter:
         if data_dir is None:
             data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
         if dataset_name is None:
-            dataset_name = 'default'
+            dataset_name = filename
 
         output_tar_path = os.path.join(data_dir, f"{filename}.tar")
 

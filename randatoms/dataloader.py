@@ -23,7 +23,8 @@ class DataLoader:
     def __init__(self, filename: str = 'default', data_dir: str = None, n_workers: int = None):
         if data_dir is None:
             data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset')
-                
+        
+        self.filename = filename
         self.tar_path = os.path.join(data_dir, f"{filename}.tar")
         self.n_workers = n_workers if n_workers else max(2, mp.cpu_count())
         self.h5_buffer = None
@@ -68,7 +69,8 @@ class DataLoader:
                       max_atoms: Optional[int] = None,
                       min_atoms: Optional[int] = None,
                       is_periodic: Optional[bool] = None,
-                      has_metals: Optional[bool] = None) -> List[int]:
+                      has_metals: Optional[bool] = None,
+                      include_datasets: Optional[List[str]] = None) -> List[int]:
         """Fast index filtering using precomputed indices with additional filters"""
         valid_indices = set(self.df.index)
 
@@ -111,6 +113,15 @@ class DataLoader:
             
             if has_metals is not None:
                 masks.append(df_subset['has_metals'] == has_metals)
+
+            if include_datasets:
+                if 'dataset' in df_subset.columns:
+                    masks.append(df_subset['dataset'].isin(include_datasets))
+                else:
+                    # If 'dataset' column doesn't exist, it's a single dataset.
+                    # Check if its name is in the list.
+                    if self.filename not in include_datasets:
+                        return [] # Return empty list if this dataset is not requested
 
             # Apply all masks efficiently
             if masks:
@@ -201,6 +212,8 @@ class DataLoader:
                 Minimum number of atoms required in a structure.
             - is_periodic : bool, optional
             - has_metals : bool, optional
+            - include_datasets : list of str, optional
+                A list of dataset names to include. Only structures from these datasets will be considered.
 
         Returns
         -------
@@ -271,7 +284,7 @@ class DataLoader:
             "Percentage of dataset",
             "Molecular weight range",
             "Average atoms per structure",
-            "# atoms range",
+            "Atoms range",
             "Periodic structures",
             "Structures with metals"
         ]
@@ -330,4 +343,3 @@ class DataLoader:
 
                 print(f"{elem_fmt}: {count_fmt} structures {bar} {percent_fmt}")
             print("=======================================================")
-
