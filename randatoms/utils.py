@@ -38,7 +38,7 @@ def extract_metadata_batch_worker(args_tuple: Tuple[List[Tuple[int, Atoms, str]]
     return results
 
 
-def datasets_summary(data_dir=None):
+def available_datasets(data_dir=None):
     """
     Lists available datasets and their summary statistics.
 

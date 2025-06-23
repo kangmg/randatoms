@@ -1,5 +1,5 @@
 from .dataloader import DataLoader
-from .utils import datasets_summary
+from .utils import available_datasets
 
 # High-level API for direct access
 _loader = None
