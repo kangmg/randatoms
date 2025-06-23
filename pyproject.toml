@@ -25,4 +25,4 @@ packages = ["randatoms"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"randatoms.dataset" = ["*.h5", "*.pkl"]
+"randatoms.dataset" = ["*.tar"]
