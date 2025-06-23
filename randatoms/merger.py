@@ -104,11 +104,37 @@ class DatasetMerger:
 
         # Prepare metadata for saving
         merged_metadata_df = pd.DataFrame(all_metadata)
+        
+        print("Building merged element index...")
+        element_index = {}
+        for metadata_row in tqdm(all_metadata, desc="Building index"):
+            idx = metadata_row['index']
+            for element in metadata_row['elements']:
+                element_index.setdefault(element, set()).add(idx)
+        element_index = {k: sorted(list(v)) for k, v in element_index.items()}
+
+        print("Calculating merged statistics...")
+        stats = {
+            'total_structures': len(merged_metadata_df),
+            'mw_range': (float(merged_metadata_df['molecular_weight'].min()), float(merged_metadata_df['molecular_weight'].max())),
+            'avg_atoms': float(merged_metadata_df['n_atoms'].mean()),
+            'max_atoms': int(merged_metadata_df['n_atoms'].max()),
+            'min_atoms': int(merged_metadata_df['n_atoms'].min()),
+            'periodic_ratio': float(merged_metadata_df['is_periodic'].mean()),
+            'has_metals_ratio': float(merged_metadata_df['has_metals'].mean()),
+            'unique_elements': sorted(element_index.keys()),
+            'element_counts': {elem: len(indices) for elem, indices in element_index.items()}
+        }
+        
         metadata_to_save = {
             'dataframe': merged_metadata_df,
+            'element_index': element_index,
+            'mw_sorted_indices': merged_metadata_df['molecular_weight'].argsort().values,
+            'statistics': stats,
         }
+        
         pkl_buffer = io.BytesIO()
-        pickle.dump(metadata_to_save, pkl_buffer)
+        pickle.dump(metadata_to_save, pkl_buffer, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Write to a single TAR file
         print("Saving merged data to TAR archive...")

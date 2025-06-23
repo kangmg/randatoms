@@ -118,11 +118,7 @@ class DataLoader:
                 if 'dataset' in df_subset.columns:
                     masks.append(df_subset['dataset'].isin(include_datasets))
                 else:
-                    # If 'dataset' column doesn't exist, it's a single dataset.
-                    # Check if its name is in the list.
-                    if self.filename not in include_datasets:
-                        return [] # Return empty list if this dataset is not requested
-
+                    raise ValueError('`dataset` keyword is missing in metadata')
             # Apply all masks efficiently
             if masks:
                 combined_mask = masks[0]
