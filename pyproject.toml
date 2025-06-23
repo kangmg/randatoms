@@ -21,8 +21,10 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["randatoms"]
 include-package-data = true
 
+[tool.setuptools.packages.find]
+where = ["."]
+
 [tool.setuptools.package-data]
-"randatoms.dataset" = ["*.tar"]
+randatoms = ["dataset/*.tar"]
