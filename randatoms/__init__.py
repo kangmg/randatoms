@@ -27,6 +27,7 @@ def set_default_dataset(source_path: str):
         raise FileNotFoundError(f"Source file not found at: {source_path}")
 
     dataset_dir = os.path.join(os.path.dirname(__file__), 'dataset')
+    os.makedirs(dataset_dir, exist_ok=True)
     
     destination_path = os.path.join(dataset_dir, 'default.tar')
 
@@ -50,6 +51,7 @@ def add_dataset(source_path: str):
         raise FileNotFoundError(f"Source file not found at: {source_path}")
 
     dataset_dir = os.path.join(os.path.dirname(__file__), 'dataset')
+    os.makedirs(dataset_dir, exist_ok=True)
     
     filename = os.path.basename(source_path)
     destination_path = os.path.join(dataset_dir, filename)
