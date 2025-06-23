@@ -67,7 +67,7 @@ class ASEtoHDF5Converter:
             pkl_info.size = len(pkl_buffer.getvalue())
             tar.addfile(pkl_info, pkl_buffer)
 
-        print(f"\033[1;34mConversion complete! File saved as {filename}.tar\033[0m")
+        print(f"\033[1;34m\nConversion complete! File saved as {filename}.tar\033[0m")
 
     def _extract_metadata(self, atoms_list: List[Atoms], dataset_name: str) -> List[Dict]:
         """Extract metadata using optimized parallel processing"""
