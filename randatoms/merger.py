@@ -96,7 +96,6 @@ class DatasetMerger:
                                 row = df[df['key'] == old_key].iloc[0].copy()
                                 row['index'] = current_index
                                 row['key'] = new_key
-                                row['dataset'] = name
                                 all_metadata.append(row.to_dict())
 
                                 current_index += 1
