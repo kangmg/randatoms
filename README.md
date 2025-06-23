@@ -36,15 +36,18 @@ from randatoms import DataLoader
 # Initialize loader
 loader = DataLoader('default')
 
-# Get random structures
-atoms = get_random_structures(
+# filter query
+query = dict(
     include_elements=['C', 'H', 'O'],
-    mw_range=(100, 500),
-    max_atoms=100
-)
+    has_metals=True,
+    is_periodic=True
+    )
+
+# Get random structures
+atoms = loader.get_random_structures(**query)
 
 # View statistics
-loader.print_statistics(include_elements=['C', 'H', 'O'], has_metals=True, is_periodic=True)
+loader.print_statistics(**query)
 ```
 
 ## Features
