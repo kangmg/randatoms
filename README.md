@@ -60,6 +60,11 @@ loader.print_statistics(**filter)
 
 ## Unit test
 ```shell
+wget -O randatoms-main.zip https://github.com/kangmg/randatoms/archive/refs/heads/main.zip
+
+unzip randatoms-main.zip "randatoms-main/test/*" && mv randatoms-main/test ./test && rm -rf randatoms-main randatoms-main.zip
+
+
 python3 -m unittest discover test -v
 ```
 
