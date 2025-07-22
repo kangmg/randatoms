@@ -16,11 +16,24 @@ pip install randatoms
 
 ## Usage
 
-### 🔗 Try it on Google Colab
-
-<a href="https://colab.research.google.com/github/kangmg/randatoms/blob/main/notebooks/randatoms_tutorial.ipynb">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
+<table>
+  <tr>
+    <th>💬 Conversational AI Docs </th>
+    <th>🔗 Try it on Google Colab</th>
+  </tr>
+  <tr>
+    <td>
+      <a href="https://deepwiki.com/kangmg/randatoms">
+        <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki">
+      </a>
+    </td>
+    <td>
+      <a href="https://colab.research.google.com/github/kangmg/randatoms/blob/main/notebooks/randatoms_tutorial.ipynb">
+        <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+      </a>
+    </td>
+  </tr>
+</table>
 
 
 ### Loading Random Structures
