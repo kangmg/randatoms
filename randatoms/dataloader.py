@@ -76,16 +76,17 @@ class DataLoader:
 
         # Element filters (most selective first)
         if include_elements:
-            include_set = set()
+            include_set = None
             for element in include_elements:
                 if element in self.element_index:
-                    if not include_set:
+                    if include_set is None:
                         include_set = self.element_index[element].copy()
                     else:
                         include_set &= self.element_index[element]
                 else:
                     return []  # Element not found, no matches possible
-            valid_indices &= include_set
+            if include_set is not None:
+                valid_indices &= include_set
 
         if exclude_elements:
             for element in exclude_elements:
@@ -102,10 +103,10 @@ class DataLoader:
                 masks.append((df_subset['molecular_weight'] >= min_mw) & 
                             (df_subset['molecular_weight'] <= max_mw))
             
-            if max_atoms:
+            if max_atoms is not None:
                 masks.append(df_subset['n_atoms'] <= max_atoms)
-                
-            if min_atoms:
+
+            if min_atoms is not None:
                 masks.append(df_subset['n_atoms'] >= min_atoms)
             
             if is_periodic is not None:

@@ -78,6 +78,48 @@ class TestDataLoader(unittest.TestCase):
         indices = self.loader.filter_indices(include_datasets=['non_existent_dataset'])
         self.assertEqual(len(indices), 0)
 
+    def test_filter_multiple_elements_no_match(self):
+        """Test that include_elements with 3+ elements correctly returns empty
+        when no structure contains all specified elements.
+
+        Regression test: previously, if an intermediate set intersection became
+        empty, the `if not include_set` check would reset the accumulator,
+        producing false positives.
+        """
+        print("\nRunning test: test_filter_multiple_elements_no_match (DataLoader)")
+        # molecules: H2O, NH3, CH3OH, CH4, C6H6, H2
+        # No structure contains all of N, C, and H (NH3 has N+H but no C;
+        # CH4/C6H6/CH3OH have C+H but no N)
+        indices = self.loader.filter_indices(include_elements=['N', 'C', 'H'])
+        self.assertEqual(len(indices), 0)
+
+    def test_filter_multiple_elements_with_match(self):
+        """Test that include_elements correctly finds structures containing all elements."""
+        print("\nRunning test: test_filter_multiple_elements_with_match (DataLoader)")
+        # CH3OH contains C, H, and O
+        indices = self.loader.filter_indices(include_elements=['C', 'H', 'O'])
+        self.assertEqual(len(indices), 1)
+        structures = self.loader.load_structures(indices)
+        symbols = set(structures[0].get_chemical_symbols())
+        self.assertTrue({'C', 'H', 'O'}.issubset(symbols))
+
+    def test_filter_combined_elements_and_atoms(self):
+        """Test combining element filters with atom count filters."""
+        print("\nRunning test: test_filter_combined_elements_and_atoms (DataLoader)")
+        # molecules: H2O(3), NH3(4), CH3OH(6), CH4(5), C6H6(12), H2(2)
+        # Include C and H: CH3OH(6), CH4(5), C6H6(12)
+        # Then max_atoms=6: CH3OH(6), CH4(5)
+        indices = self.loader.filter_indices(include_elements=['C', 'H'], max_atoms=6)
+        self.assertEqual(len(indices), 2)
+
+    def test_filter_min_atoms_zero(self):
+        """Test that min_atoms=0 is not silently ignored."""
+        print("\nRunning test: test_filter_min_atoms_zero (DataLoader)")
+        # min_atoms=0 should include all structures (all have >= 0 atoms)
+        indices_all = self.loader.filter_indices()
+        indices_min0 = self.loader.filter_indices(min_atoms=0)
+        self.assertEqual(len(indices_min0), len(indices_all))
+
 
 class TestMergedDatasetLoader(unittest.TestCase):
     @classmethod
